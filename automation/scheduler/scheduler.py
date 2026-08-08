@@ -1,12 +1,13 @@
 from apscheduler.schedulers.blocking import BlockingScheduler
-from automation.discovery.news_fetcher import fetch_latest_news
+from automation.agent.agent_loop import run_agent
 
 
-def run_news_collection():
-    print("\n===== AUTOMATIC NEWS COLLECTION =====")
+def run_autonomous_agent():
+    print("\n===== AUTOMATIC AURA AGENT =====")
 
-    articles = fetch_latest_news()
+    articles = run_agent()
 
+    print(f"Automatic run completed.")
     print(f"New articles collected: {len(articles)}")
 
 
@@ -15,13 +16,13 @@ def start_scheduler():
 
     # Run every 10 minutes
     scheduler.add_job(
-        run_news_collection,
+        run_autonomous_agent,
         "interval",
         minutes=10
     )
 
     print("Scheduler started.")
-    print("News collection will run every 10 minutes.")
+    print("Autonomous agent will run every 10 minutes.")
 
     try:
         scheduler.start()
