@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+﻿from fastapi import FastAPI
 
 from app.api.feed import router as feed_router
 from app.api.init_agent import router as agent_router
@@ -10,7 +10,7 @@ Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="AURA Backend API",
-    description="Backend API for the Autonomous AI Creator.",
+    description="Backend API for the AURA autonomous AI creator.",
     version="1.0.0",
 )
 

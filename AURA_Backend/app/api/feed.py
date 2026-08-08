@@ -12,7 +12,6 @@ router = APIRouter(
     tags=["Feed"],
 )
 
-
 @router.get("/feed", response_model=list[PostResponse])
 def get_feed(
     agentId: int = Query(..., gt=0),

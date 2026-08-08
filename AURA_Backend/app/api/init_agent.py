@@ -11,7 +11,6 @@ router = APIRouter(
     tags=["Agent"],
 )
 
-
 @router.post("/init", response_model=AgentInitResponse)
 def init_agent(
     request: AgentInitRequest,
