@@ -1,4 +1,12 @@
 import hashlib
+import json
+import os
+
+
+MEMORY_FILE = os.path.join(
+    os.path.dirname(__file__),
+    "seen_articles.json"
+)
 
 
 def generate_article_id(article):
@@ -14,12 +22,39 @@ def generate_article_id(article):
     return hashlib.sha256(url.encode("utf-8")).hexdigest()
 
 
-def remove_duplicates(articles):
+def load_seen_ids():
     """
-    Remove duplicate articles from a list.
+    Load previously seen article IDs from the memory file.
     """
 
-    seen_ids = set()
+    if not os.path.exists(MEMORY_FILE):
+        return set()
+
+    try:
+        with open(MEMORY_FILE, "r", encoding="utf-8") as file:
+            data = json.load(file)
+
+        return set(data)
+
+    except (json.JSONDecodeError, OSError):
+        return set()
+
+
+def save_seen_ids(seen_ids):
+    """
+    Save article IDs so they are remembered between program runs.
+    """
+
+    with open(MEMORY_FILE, "w", encoding="utf-8") as file:
+        json.dump(sorted(seen_ids), file, indent=2)
+
+
+def remove_duplicates(articles):
+    """
+    Remove articles that have already been seen.
+    """
+
+    seen_ids = load_seen_ids()
     unique_articles = []
 
     for article in articles:
@@ -36,29 +71,6 @@ def remove_duplicates(articles):
         article["article_id"] = article_id
         unique_articles.append(article)
 
+    save_seen_ids(seen_ids)
+
     return unique_articles
-if __name__ == "__main__":
-    test_articles = [
-        {
-            "title": "AI Model Released",
-            "url": "https://example.com/article1"
-        },
-        {
-            "title": "AI Model Released",
-            "url": "https://example.com/article1"
-        },
-        {
-            "title": "New AI Chip",
-            "url": "https://example.com/article2"
-        }
-    ]
-
-    unique_articles = remove_duplicates(test_articles)
-
-    print("Original articles:", len(test_articles))
-    print("Unique articles:", len(unique_articles))
-
-    for article in unique_articles:
-        print(article["title"])
-        print(article["article_id"])
-        print()
