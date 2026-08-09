@@ -8,3 +8,13 @@ class AgentInitRequest(BaseModel):
 
 class AgentInitResponse(BaseModel):
     agentId: int
+
+
+class AgentResponse(BaseModel):
+    agentId: int
+    name: str
+    domain: str
+
+class AgentStatusResponse(BaseModel):
+    agentId: int
+    status: str

@@ -2,6 +2,8 @@
 
 from app.api.feed import router as feed_router
 from app.api.init_agent import router as agent_router
+from app.api.process import router as process_router
+from app.api.posts import router as posts_router
 from app.database.database import engine
 from app.database.models import Base
 
@@ -14,8 +16,10 @@ app = FastAPI(
     version="1.0.0",
 )
 
-app.include_router(agent_router)
 app.include_router(feed_router)
+app.include_router(posts_router)
+app.include_router(agent_router)
+app.include_router(process_router)
 
 
 @app.get("/")
