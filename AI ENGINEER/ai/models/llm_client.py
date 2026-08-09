@@ -1,6 +1,8 @@
+import json
 import os
 from typing import Optional, Type, TypeVar
 
+import requests
 from dotenv import load_dotenv
 from google import genai
 from pydantic import BaseModel
@@ -11,54 +13,159 @@ T = TypeVar("T", bound=BaseModel)
 
 
 class LLMClient:
-    """Centralized Gemini client used by the AURA AI Engine."""
+    """Centralized LLM client with Gemini -> OpenRouter fallback."""
 
     DEFAULT_MODEL = "gemini-3.6-flash"
+    OPENROUTER_MODEL = "openai/gpt-4o-mini"
 
     def __init__(self, model: Optional[str] = None):
         self.api_key = os.getenv("GEMINI_API_KEY")
+        self.openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
 
-        if not self.api_key:
+        if not self.api_key and not self.openrouter_api_key:
             raise RuntimeError(
-                "GEMINI_API_KEY is not configured. "
-                "Add it to the .env file."
+                "Neither GEMINI_API_KEY nor OPENROUTER_API_KEY is configured."
             )
 
         self.model = model or self.DEFAULT_MODEL
 
-        self.client = genai.Client(
-            api_key=self.api_key
+        self.client = None
+        if self.api_key:
+            self.client = genai.Client(api_key=self.api_key)
+
+    def _gemini_failed(self, exc: Exception) -> bool:
+        """Return True when Gemini should trigger the fallback."""
+        message = str(exc).upper()
+
+        return any(
+            indicator in message
+            for indicator in (
+                "429",
+                "RESOURCE_EXHAUSTED",
+                "QUOTA",
+                "RATE LIMIT",
+                "RATE_LIMIT",
+                "TOO MANY REQUESTS",
+            )
         )
 
+    def _openrouter_generate(self, prompt: str) -> str:
+        """Generate a normal text response using OpenRouter."""
+
+        if not self.openrouter_api_key:
+            raise RuntimeError(
+                "Gemini failed, but OPENROUTER_API_KEY is not configured."
+            )
+
+        response = requests.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {self.openrouter_api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": self.OPENROUTER_MODEL,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": prompt,
+                    }
+                ],
+            },
+            timeout=60,
+        )
+
+        response.raise_for_status()
+
+        data = response.json()
+        text = data["choices"][0]["message"]["content"]
+
+        if not text or not text.strip():
+            raise RuntimeError("OpenRouter returned an empty response.")
+
+        return text.strip()
+
+    def _openrouter_structured(
+        self,
+        prompt: str,
+        response_schema: Type[T],
+    ) -> T:
+        """Generate and validate a structured response using OpenRouter."""
+
+        if not self.openrouter_api_key:
+            raise RuntimeError(
+                "Gemini failed, but OPENROUTER_API_KEY is not configured."
+            )
+
+        schema = response_schema.model_json_schema()
+
+        structured_prompt = f"""
+{prompt}
+
+Return ONLY valid JSON matching this schema:
+
+{json.dumps(schema, indent=2)}
+"""
+
+        text = self._openrouter_generate(structured_prompt)
+
+        try:
+            return response_schema.model_validate_json(text)
+        except Exception:
+            # Some models wrap JSON in markdown fences.
+            cleaned = text.strip()
+
+            if cleaned.startswith("```"):
+                cleaned = cleaned.replace("```json", "", 1)
+                cleaned = cleaned.replace("```", "", 1)
+                cleaned = cleaned.strip()
+
+            return response_schema.model_validate_json(cleaned)
+
     def generate(self, prompt: str) -> str:
-        """Generate a normal text response."""
+        """Generate text using Gemini, falling back to OpenRouter."""
 
         if not prompt or not prompt.strip():
             raise ValueError("Prompt cannot be empty.")
 
-        response = self.client.models.generate_content(
-            model=self.model,
-            contents=prompt,
-        )
+        # Try Gemini first.
+        if self.client:
+            try:
+                response = self.client.models.generate_content(
+                    model=self.model,
+                    contents=prompt,
+                )
 
-        if response is None:
-            raise RuntimeError("Gemini returned no response.")
+                if response is None:
+                    raise RuntimeError("Gemini returned no response.")
 
-        text = response.text
+                text = response.text
 
-        if not text or not text.strip():
-            raise RuntimeError(
-                "Gemini returned an empty response."
-            )
+                if not text or not text.strip():
+                    raise RuntimeError(
+                        "Gemini returned an empty response."
+                    )
 
-        return text.strip()
+                return text.strip()
+
+            except Exception as exc:
+                if not self._gemini_failed(exc):
+                    raise
+
+                print(
+                    "Gemini quota/API limit reached. "
+                    "Switching to OpenRouter..."
+                )
+
+        # Gemini failed → OpenRouter.
+        return self._openrouter_generate(prompt)
 
     def generate_structured(
         self,
         prompt: str,
         response_schema: Type[T],
     ) -> T:
-        """Generate a structured Pydantic response."""
+        """Generate structured data using Gemini, then OpenRouter fallback."""
 
         if not prompt or not prompt.strip():
             raise ValueError("Prompt cannot be empty.")
@@ -66,44 +173,44 @@ class LLMClient:
         if not response_schema:
             raise ValueError("Response schema is required.")
 
-        try:
-            response = self.client.models.generate_content(
-                model=self.model,
-                contents=prompt,
-                config={
-                    "response_mime_type": "application/json",
-                    "response_schema": response_schema,
-                },
-            )
+        # Try Gemini first.
+        if self.client:
+            try:
+                response = self.client.models.generate_content(
+                    model=self.model,
+                    contents=prompt,
+                    config={
+                        "response_mime_type": "application/json",
+                        "response_schema": response_schema,
+                    },
+                )
 
-        except Exception as exc:
-            message = str(exc)
+                if response is None:
+                    raise RuntimeError("Gemini returned no response.")
 
-            if "429" in message or "RESOURCE_EXHAUSTED" in message:
-                raise RuntimeError(
-                    "Gemini API quota exhausted. "
-                    "Use offline/fake LLM tests or wait for quota reset."
-                ) from exc
+                if response.parsed is not None:
+                    return response.parsed
 
-            raise
+                if not response.text:
+                    raise RuntimeError(
+                        "Gemini returned an empty structured response."
+                    )
 
-        if response is None:
-            raise RuntimeError("Gemini returned no response.")
+                return response_schema.model_validate_json(
+                    response.text
+                )
 
-        if response.parsed is not None:
-            return response.parsed
+            except Exception as exc:
+                if not self._gemini_failed(exc):
+                    raise
 
-        if not response.text:
-            raise RuntimeError(
-                "Gemini returned an empty structured response."
-            )
+                print(
+                    "Gemini quota/API limit reached. "
+                    "Switching to OpenRouter..."
+                )
 
-        try:
-            return response_schema.model_validate_json(
-                response.text
-            )
-        except Exception as exc:
-            raise RuntimeError(
-                "Gemini returned data that could not be "
-                "validated against the requested schema."
-            ) from exc
+        # Gemini failed → OpenRouter.
+        return self._openrouter_structured(
+            prompt,
+            response_schema,
+        )
