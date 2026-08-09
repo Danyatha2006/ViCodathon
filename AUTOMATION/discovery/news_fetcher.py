@@ -1,35 +1,45 @@
 from AUTOMATION.discovery.rss_reader import collect_from_all_sources
-from AUTOMATION.discovery.duplicate_detector import remove_duplicates
 
 
 def fetch_latest_news():
     """
     Fetch the latest news from all configured sources.
+
+    IMPORTANT:
+    This function does NOT mark articles as seen.
+    Articles should only be marked as processed after
+    successful AI processing/publishing.
     """
 
     articles = collect_from_all_sources()
 
     cleaned_articles = []
+    seen_urls = set()
 
     for article in articles:
         title = article.get("title", "").strip()
         url = article.get("url", "").strip()
 
-        # Ignore articles without a title or URL
         if not title or not url:
             continue
 
-        cleaned_article = {
-            "title": title,
-            "url": url,
-            "summary": article.get("summary", "").strip(),
-            "published": article.get("published", ""),
-            "source": article.get("source", "")
-        }
+        # Remove duplicates within this single RSS fetch.
+        if url in seen_urls:
+            continue
 
-        cleaned_articles.append(cleaned_article)
+        seen_urls.add(url)
 
-    return remove_duplicates(cleaned_articles)
+        cleaned_articles.append(
+            {
+                "title": title,
+                "url": url,
+                "summary": article.get("summary", "").strip(),
+                "published": article.get("published", ""),
+                "source": article.get("source", ""),
+            }
+        )
+
+    return cleaned_articles
 
 
 if __name__ == "__main__":
@@ -42,6 +52,5 @@ if __name__ == "__main__":
     for article in articles[:5]:
         print("TITLE:", article["title"])
         print("SOURCE:", article["source"])
-        print("ID:", article["article_id"])
         print("URL:", article["url"])
         print()

@@ -21,6 +21,7 @@ class LLMClient:
     def __init__(self, model: Optional[str] = None):
         self.api_key = os.getenv("GEMINI_API_KEY")
         self.openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
+        self.provider = os.getenv("LLM_PROVIDER", "auto").lower()
 
         if not self.api_key and not self.openrouter_api_key:
             raise RuntimeError(
@@ -30,11 +31,17 @@ class LLMClient:
         self.model = model or self.DEFAULT_MODEL
 
         self.client = None
-        if self.api_key:
-            self.client = genai.Client(api_key=self.api_key)
+
+        # Normal mode: Gemini is the primary provider.
+        # OpenRouter-only mode: Gemini is intentionally skipped.
+        if self.api_key and self.provider != "openrouter":
+            self.client = genai.Client(
+                api_key=self.api_key
+            )
 
     def _gemini_failed(self, exc: Exception) -> bool:
         """Return True when Gemini should trigger the fallback."""
+
         message = str(exc).upper()
 
         return any(
@@ -54,7 +61,7 @@ class LLMClient:
 
         if not self.openrouter_api_key:
             raise RuntimeError(
-                "Gemini failed, but OPENROUTER_API_KEY is not configured."
+                "OPENROUTER_API_KEY is not configured."
             )
 
         response = requests.post(
@@ -78,10 +85,13 @@ class LLMClient:
         response.raise_for_status()
 
         data = response.json()
+
         text = data["choices"][0]["message"]["content"]
 
         if not text or not text.strip():
-            raise RuntimeError("OpenRouter returned an empty response.")
+            raise RuntimeError(
+                "OpenRouter returned an empty response."
+            )
 
         return text.strip()
 
@@ -94,7 +104,7 @@ class LLMClient:
 
         if not self.openrouter_api_key:
             raise RuntimeError(
-                "Gemini failed, but OPENROUTER_API_KEY is not configured."
+                "OPENROUTER_API_KEY is not configured."
             )
 
         schema = response_schema.model_json_schema()
@@ -107,20 +117,31 @@ Return ONLY valid JSON matching this schema:
 {json.dumps(schema, indent=2)}
 """
 
-        text = self._openrouter_generate(structured_prompt)
+        text = self._openrouter_generate(
+            structured_prompt
+        )
 
         try:
-            return response_schema.model_validate_json(text)
+            return response_schema.model_validate_json(
+                text
+            )
+
         except Exception:
-            # Some models wrap JSON in markdown fences.
+            # Some models may wrap JSON in markdown fences.
             cleaned = text.strip()
 
-            if cleaned.startswith("```"):
-                cleaned = cleaned.replace("```json", "", 1)
-                cleaned = cleaned.replace("```", "", 1)
-                cleaned = cleaned.strip()
+            if cleaned.startswith("```json"):
+                cleaned = cleaned[len("```json"):].strip()
 
-            return response_schema.model_validate_json(cleaned)
+            if cleaned.startswith("```"):
+                cleaned = cleaned[len("```"):].strip()
+
+            if cleaned.endswith("```"):
+                cleaned = cleaned[:-3].strip()
+
+            return response_schema.model_validate_json(
+                cleaned
+            )
 
     def generate(self, prompt: str) -> str:
         """Generate text using Gemini, falling back to OpenRouter."""
@@ -128,7 +149,17 @@ Return ONLY valid JSON matching this schema:
         if not prompt or not prompt.strip():
             raise ValueError("Prompt cannot be empty.")
 
-        # Try Gemini first.
+        # --------------------------------------------------
+        # OPENROUTER-ONLY TEST MODE
+        # --------------------------------------------------
+
+        if self.provider == "openrouter":
+            return self._openrouter_generate(prompt)
+
+        # --------------------------------------------------
+        # NORMAL MODE: GEMINI FIRST
+        # --------------------------------------------------
+
         if self.client:
             try:
                 response = self.client.models.generate_content(
@@ -137,7 +168,9 @@ Return ONLY valid JSON matching this schema:
                 )
 
                 if response is None:
-                    raise RuntimeError("Gemini returned no response.")
+                    raise RuntimeError(
+                        "Gemini returned no response."
+                    )
 
                 text = response.text
 
@@ -149,6 +182,8 @@ Return ONLY valid JSON matching this schema:
                 return text.strip()
 
             except Exception as exc:
+
+                # Only quota/rate-limit failures trigger fallback.
                 if not self._gemini_failed(exc):
                     raise
 
@@ -157,7 +192,10 @@ Return ONLY valid JSON matching this schema:
                     "Switching to OpenRouter..."
                 )
 
-        # Gemini failed → OpenRouter.
+        # --------------------------------------------------
+        # FALLBACK
+        # --------------------------------------------------
+
         return self._openrouter_generate(prompt)
 
     def generate_structured(
@@ -165,7 +203,7 @@ Return ONLY valid JSON matching this schema:
         prompt: str,
         response_schema: Type[T],
     ) -> T:
-        """Generate structured data using Gemini, then OpenRouter fallback."""
+        """Generate structured data using Gemini, then OpenRouter."""
 
         if not prompt or not prompt.strip():
             raise ValueError("Prompt cannot be empty.")
@@ -173,7 +211,20 @@ Return ONLY valid JSON matching this schema:
         if not response_schema:
             raise ValueError("Response schema is required.")
 
-        # Try Gemini first.
+        # --------------------------------------------------
+        # OPENROUTER-ONLY TEST MODE
+        # --------------------------------------------------
+
+        if self.provider == "openrouter":
+            return self._openrouter_structured(
+                prompt,
+                response_schema,
+            )
+
+        # --------------------------------------------------
+        # NORMAL MODE: GEMINI FIRST
+        # --------------------------------------------------
+
         if self.client:
             try:
                 response = self.client.models.generate_content(
@@ -186,7 +237,9 @@ Return ONLY valid JSON matching this schema:
                 )
 
                 if response is None:
-                    raise RuntimeError("Gemini returned no response.")
+                    raise RuntimeError(
+                        "Gemini returned no response."
+                    )
 
                 if response.parsed is not None:
                     return response.parsed
@@ -201,6 +254,8 @@ Return ONLY valid JSON matching this schema:
                 )
 
             except Exception as exc:
+
+                # Only quota/rate-limit failures trigger fallback.
                 if not self._gemini_failed(exc):
                     raise
 
@@ -209,7 +264,10 @@ Return ONLY valid JSON matching this schema:
                     "Switching to OpenRouter..."
                 )
 
-        # Gemini failed → OpenRouter.
+        # --------------------------------------------------
+        # FALLBACK
+        # --------------------------------------------------
+
         return self._openrouter_structured(
             prompt,
             response_schema,
