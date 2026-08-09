@@ -2,8 +2,7 @@ from dataclasses import asdict, is_dataclass
 from typing import Any
 
 from ai.ai_engine import AIEngine
-from ai.public_api import process_topic
-
+from ai.ai.public_api import process_topic
 
 def _serialize(value: Any) -> Any:
     """Convert AI response objects into JSON-safe Python data."""
