@@ -91,7 +91,6 @@ class AIEngine:
         # --------------------------------------------------
 
         if duplicate_result["is_duplicate"]:
-
             return {
                 "status": "REJECTED",
                 "reason": "DUPLICATE",
@@ -123,7 +122,6 @@ class AIEngine:
         # --------------------------------------------------
 
         if decision.decision.upper() != "PUBLISH":
-
             return {
                 "status": "REJECTED",
                 "reason": "EDITORIAL_DECISION",
@@ -140,9 +138,7 @@ class AIEngine:
         # --------------------------------------------------
 
         generated_post = self.content_generator.generate(
-            topic=topic,
-            analysis=analysis,
-            overall_score=overall_score,
+            analysis
         )
 
         # --------------------------------------------------
@@ -150,10 +146,8 @@ class AIEngine:
         # --------------------------------------------------
 
         rationale = self.rationale_generator.generate(
-            topic=topic,
-            analysis=analysis,
-            generated_post=generated_post,
-        )
+    analysis
+)
 
         # --------------------------------------------------
         # 10. SAVE MEMORY

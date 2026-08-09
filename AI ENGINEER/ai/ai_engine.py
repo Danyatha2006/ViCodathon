@@ -140,21 +140,15 @@ class AIEngine:
         # --------------------------------------------------
 
         generated_post = self.content_generator.generate(
-            topic=topic,
-            analysis=analysis,
-            overall_score=overall_score,
-        )
-
+    analysis
+)
         # --------------------------------------------------
         # 9. GENERATE RATIONALE
         # --------------------------------------------------
 
         rationale = self.rationale_generator.generate(
-            topic=topic,
-            analysis=analysis,
-            generated_post=generated_post,
-        )
-
+    analysis
+)
         # --------------------------------------------------
         # 10. SAVE MEMORY
         # --------------------------------------------------
