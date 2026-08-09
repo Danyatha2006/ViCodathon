@@ -21,12 +21,8 @@ class DecisionEngine:
         """
         Decide whether AURA should publish or reject a topic.
 
-        The decision is based on:
-        - Overall topic score
-        - Relevance
-        - Novelty
-        - AI security relevance
-        - AURA's editorial principles
+        AURA's primary focus is AI and AI-related technology.
+        Meaningful AI-related topics should generally be published.
         """
 
         if not analysis:
@@ -39,7 +35,7 @@ TASK
 
 You are AURA's editorial decision engine.
 
-You have received an analyzed technology topic.
+AURA is an AI-focused technology platform.
 
 Your job is to decide whether AURA should:
 
@@ -47,41 +43,61 @@ PUBLISH
 or
 REJECT
 
+PRIMARY PUBLISHING RULE
+
+Any meaningful topic clearly related to Artificial Intelligence
+should generally be PUBLISHED.
+
+This includes topics involving:
+
+- Artificial Intelligence
+- AI models
+- Large Language Models (LLMs)
+- Generative AI
+- AI agents
+- AI research
+- AI tools
+- AI applications
+- AI companies
+- OpenAI
+- Anthropic
+- Gemini
+- Google DeepMind
+- Meta AI
+- AI hardware
+- AI infrastructure
+- Machine learning systems
+- AI safety
+- AI security
+
 IMPORTANT:
 
-The decision must NOT always be PUBLISH.
+AI SECURITY RELEVANCE IS NOT REQUIRED for an AI-related topic
+to be published.
 
-AURA should reject topics that are:
-- trivial
-- weakly related to AI security
-- low-value
-- repetitive
-- overly generic
-- primarily promotional
-- unsupported by meaningful technical information
-- not useful to AURA's audience
+Do NOT reject an AI-related topic simply because its
+security_relevance_score is low.
 
-AURA should publish topics that are:
-- technically significant
-- relevant to AI security
-- sufficiently novel
-- useful to the audience
-- supported by meaningful information
-- aligned with AURA's editorial mission
+A topic should generally be REJECTED only when it is:
+
+- clearly unrelated to AI
+- a duplicate or repetitive topic
+- meaningless or extremely low-value
+- purely promotional with no useful information
+- unsupported or nonsensical
 
 EDITORIAL GUIDELINES
 
-Prefer technical significance over popularity.
+Prefer meaningful technical information.
 
-Prefer useful insight over engagement bait.
+Prefer useful information over engagement bait.
 
-Avoid unnecessary hype.
+Avoid unsupported claims.
 
-Do not publish simply because a topic is trending.
+Do not reject a topic merely because it is not specifically
+about AI security.
 
-Do not make unsupported claims.
-
-Distinguish facts from interpretation.
+AI relevance is more important than AI security relevance.
 
 INPUT TOPIC
 
@@ -105,16 +121,21 @@ Overall weighted score:
 
 DECISION RULES
 
-Use the scores as important evidence, but do not blindly follow the
-overall score.
+1. If the topic is clearly about AI or AI-related technology,
+   choose PUBLISH unless it is clearly duplicate, meaningless,
+   purely promotional, or unsupported.
 
-A topic with weak AI security relevance should generally be rejected.
+2. Topics about AI models, LLMs, generative AI, Anthropic,
+   OpenAI, Gemini, DeepMind, AI tools, AI research, AI agents,
+   AI hardware, AI infrastructure, and AI applications should
+   generally receive PUBLISH.
 
-A topic with very low relevance or very low novelty should generally
-be rejected unless there is a strong editorial reason to publish it.
+3. Do NOT require strong AI security relevance.
 
-A strong topic with meaningful AI security implications should generally
-be published.
+4. Do NOT reject an AI topic only because its overall score
+   is below a preferred threshold.
+
+5. Only choose REJECT when there is a clear editorial reason.
 
 Return exactly one decision:
 
@@ -122,7 +143,7 @@ PUBLISH
 or
 REJECT
 
-Also provide a concise explanation of why AURA made that decision.
+Also provide a concise explanation for the decision.
 
 Return the result using the required structured format.
 """
@@ -132,8 +153,7 @@ Return the result using the required structured format.
             EditorialDecisionResponse,
         )
 
-        # Defensive validation so downstream modules never receive
-        # an unexpected decision value.
+        # Defensive validation
         decision = result.decision.strip().upper()
 
         if decision not in {"PUBLISH", "REJECT"}:
